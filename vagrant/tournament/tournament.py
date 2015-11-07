@@ -2,6 +2,7 @@
 #
 # tournament.py -- implementation of a Swiss-system tournament
 #
+import contextlib
 
 import psycopg2
 
@@ -11,34 +12,41 @@ def connect():
     return psycopg2.connect("dbname=tournament")
 
 
+@contextlib.contextmanager
+def get_cursor():
+    """Decorator which connects to the database, allows to work on the
+    database and finally closes connection to the database.
+    """
+    conn = connect()
+    cur = conn.cursor()
+    try:
+        yield cur
+    except:
+        raise
+    else:
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+
+
 def deleteMatches():
     """Remove all the match records from the database."""
-    conn = connect()
-    c = conn.cursor()
-    query = "DELETE FROM Match;"
-    c.execute(query)
-    conn.commit()
-    conn.close()
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM Match;")
 
 
 def deletePlayers():
     """Remove all the player records from the database."""
-    conn = connect()
-    c = conn.cursor()
-    query = "DELETE FROM Player;"
-    c.execute(query)
-    conn.commit()
-    conn.close()
+    with get_cursor() as cur:
+        cur.execute("DELETE FROM Player;")
 
 
 def countPlayers():
     """Returns the number of players currently registered."""
-    conn = connect()
-    c = conn.cursor()
-    query = "SELECT COUNT(*) FROM Player;"
-    c.execute(query)
-    result = c.fetchone()
-    conn.close()
+    with get_cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM Player;")
+        result = cur.fetchone()
     return result[0]
 
 
@@ -51,12 +59,9 @@ def registerPlayer(name):
     Args:
       name: the player's full name (need not be unique).
     """
-    conn = connect()
-    c = conn.cursor()
-    query = "INSERT INTO Player(name) VALUES (%s);"
-    c.execute(query, (name,))
-    conn.commit()
-    conn.close()
+    with get_cursor() as cur:
+        query = "INSERT INTO Player(name) VALUES (%s);"
+        cur.execute(query, (name,))
 
 
 def playerStandings():
@@ -74,12 +79,9 @@ def playerStandings():
         points: the number of points the player has gained
         ranking: players ranking based on wins, ties and matches played
     """
-    conn = connect()
-    c = conn.cursor()
-    query = "SELECT * FROM Standings"
-    c.execute(query)
-    result = c.fetchall()
-    conn.close()
+    with get_cursor() as cur:
+        cur.execute("SELECT * FROM Standings")
+        result = cur.fetchall()
     return result
 
 
@@ -97,13 +99,10 @@ def reportMatch(player_one, player_two, result):
         3: the match resulted in a tie
     In case of a 'bye' set player_two value to None and result to 1
     """
-    conn = connect()
-    c = conn.cursor()
-    query = "INSERT INTO Match(player_one_id, player_two_id, result_id) " \
-            "VALUES (%s, %s, %s);"
-    c.execute(query, (player_one, player_two, result))
-    conn.commit()
-    conn.close()
+    with get_cursor() as cur:
+        query = "INSERT INTO Match(player_one_id, player_two_id, result_id) " \
+                "VALUES (%s, %s, %s);"
+        cur.execute(query, (player_one, player_two, result))
 
 
 def swissPairings():
@@ -127,33 +126,32 @@ def swissPairings():
     pairs = []
     # Connecting to db and declaring cursor early because of necessity to
     # execute multiple queries to find pairs of players who haven't played yet
-    conn = connect()
-    c = conn.cursor()
-    # Find pairs of players who are closest in ranking and haven't played yet
-    while len(standings) > 1:
-        # First player of the pair
-        first_player = standings[0]
-        # Find best pair for first player of the pair
-        for i in range(1, len(standings)):
-            second_player = standings[i]
-            # Check if players played before
-            query = "SELECT COUNT(*) FROM Match m " \
-                    "WHERE (m.player_one_id=%s AND m.player_two_id=%s) " \
-                    "OR (m.player_one_id=%s AND m.player_two_id=%s);"
-            c.execute(query, (
-                first_player[0], second_player[0],
-                second_player[0], first_player[0]))
-            result = c.fetchone()
-            # If players never played before pair them,
-            # else check next player in rankings
-            if result[0] == 0:
-                pairs.append((first_player[0], first_player[1],
-                              second_player[0],
-                              second_player[1]))
-                del standings[i]
-                del standings[0]
-                break
-    conn.close()
+    with get_cursor() as cur:
+        # Find pairs of players who are closest in ranking
+        # and haven't played yet
+        while len(standings) > 1:
+            # First player of the pair
+            first_player = standings[0]
+            # Find best pair for first player of the pair
+            for i in range(1, len(standings)):
+                second_player = standings[i]
+                # Check if players played before
+                query = "SELECT COUNT(*) FROM Match m " \
+                        "WHERE (m.player_one_id=%s AND m.player_two_id=%s) " \
+                        "OR (m.player_one_id=%s AND m.player_two_id=%s);"
+                cur.execute(query, (
+                    first_player[0], second_player[0],
+                    second_player[0], first_player[0]))
+                result = cur.fetchone()
+                # If players never played before pair them,
+                # else check next player in rankings
+                if result[0] == 0:
+                    pairs.append((first_player[0], first_player[1],
+                                  second_player[0],
+                                  second_player[1]))
+                    del standings[i]
+                    del standings[0]
+                    break
     # If there is odd number of players give 'bye' to player without pair
     if len(standings) == 1:
         #
