@@ -6,7 +6,7 @@ Tournament planner allows to create and conduct a swiss-system tournament.
 
 You have to have [VirtualBox](https://www.virtualbox.org/) and [Vagrant](https://www.vagrantup.com/) installed. Also you need psycopg2 package.
 
-##Installation
+## Installation
 
 Download the repository. Next use command line like Git Bash to navigate to vagrant folder and type commands:
 ```
