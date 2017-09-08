@@ -1,5 +1,5 @@
 # Tournament planner
-=============
+
 Tournament planner allows to create and conduct a swiss-system tournament.
 
 ## Requirements
